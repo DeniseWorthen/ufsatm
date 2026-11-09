@@ -1088,7 +1088,7 @@ contains
     !   write(0,*)' stype read in min,max=',minval(sfc_var2(:,:,18)),maxval(sfc_var2(:,:,18))
     !   write(0,*)' sfc_var2=',sfc_var2(:,:,12)
 
-    !$omp parallel do default(shared) private(i, j, nb, ix, nt, ii1, jj1, lsoil, ixs, ixe, im)
+    !$omp parallel do default(shared) private(i, j, nb, ix, nt, ii1, jj1, lsoil, ixs, ixe, im, ice)
     block_loop: do nb = 1, Atm_block%nblks
       allocate(ii1(Atm_block%blksz(nb)))
       allocate(jj1(Atm_block%blksz(nb)))
