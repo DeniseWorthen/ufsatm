@@ -17,7 +17,7 @@ module fv3atm_sfc_io
   use fv3atm_common_io,   only: GFS_Data_transfer, axis_type, &
        create_2d_field_and_add_to_bundle, create_3d_field_and_add_to_bundle
   use GFS_typedefs,       only: GFS_sfcprop_type, GFS_control_type, kind_phys
-  use mpp_mod,            only: mpp_error,  NOTE, mpp_max
+  use mpp_mod,            only: mpp_error,  NOTE
   use physcons,           only: con_tice          !saltwater freezing temp (K)
 
   implicit none
@@ -1593,12 +1593,6 @@ contains
     type(GFS_control_type),      intent(in) :: Model
 
     integer :: i, j, k, nb, ix, lsoil, num, nt, im
-    ! V1 coldstart safeguards: true if a field is missing (< -9990) at every point on every PE.
-    ! Decided once, globally, so the result does not depend on the MPI layout.
-    logical :: missing_snodl, missing_weasdl, missing_tsfcl, missing_zorlw, missing_zorll, &
-               missing_zorli, missing_emis_ice, missing_sncovr_ice, missing_snodi,       &
-               missing_weasdi, missing_cice_alb, missing_zorlwav, missing_tiice, &
-               missing_scolor
     integer :: isc, iec, jsc, jec, npz, nx, ny
     real(kind_phys) :: ice, tem, tem1
 
@@ -1624,13 +1618,12 @@ contains
     i = Atm_block%index(1)%ii(1) - isc + 1
     j = Atm_block%index(1)%jj(1) - jsc + 1
 
-    ! Decided globally (collective call, made on all PEs) so it does not depend on the MPI layout.
-    missing_scolor = var_missing_everywhere(sfc%var2(:,:,32))
-    if (missing_scolor) then
+    if (any_missing(32)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - set init soil color')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(32, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if ( nint (Sfcprop%slmsk(im)) == 1 ) then  !including glacier
             Sfcprop%scolor(im)  = 4
@@ -1801,27 +1794,13 @@ contains
 
     else ! old verion of coldstart file
 
-    ! Decide once per field, consistently on all PEs (these are collective calls; keep them
-    ! unconditional and in this order so every PE makes the same sequence of calls).
-    missing_snodl      = var_missing_everywhere(sfc%var2(:,:,34))
-    missing_weasdl     = var_missing_everywhere(sfc%var2(:,:,35))
-    missing_tsfcl      = var_missing_everywhere(sfc%var2(:,:,37))
-    missing_zorlw      = var_missing_everywhere(sfc%var2(:,:,38))
-    missing_zorll      = var_missing_everywhere(sfc%var2(:,:,39))
-    missing_zorli      = var_missing_everywhere(sfc%var2(:,:,40))
-    missing_emis_ice   = var_missing_everywhere(sfc%var2(:,:,46))
-    missing_sncovr_ice = var_missing_everywhere(sfc%var2(:,:,47))
-    missing_snodi      = var_missing_everywhere(sfc%var2(:,:,48))
-    missing_weasdi     = var_missing_everywhere(sfc%var2(:,:,49))
-    missing_zorlwav    = var_missing_everywhere(sfc%var2(:,:,sfc%nvar2m))
-    missing_tiice      = var_missing_everywhere(sfc%var3ice(:,:,1))
 
-
-    if (missing_snodl) then
+    if (any_missing(34)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing snodl')
       !$omp parallel do default(shared) private(nb, ix, im, tem)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(34, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%landfrac(im) > zero) then
             tem = one / (Sfcprop%fice(im)*(one-Sfcprop%landfrac(im))+Sfcprop%landfrac(im))
@@ -1833,11 +1812,12 @@ contains
       enddo
     endif
 
-    if (missing_weasdl) then
+    if (any_missing(35)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing weasdl')
       !$omp parallel do default(shared) private(nb, ix, im, tem)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(35, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%landfrac(im) > zero) then
             tem = one / (Sfcprop%fice(im)*(one-Sfcprop%landfrac(im))+Sfcprop%landfrac(im))
@@ -1849,22 +1829,24 @@ contains
       enddo
     endif
 
-    if (missing_tsfcl) then
+    if (any_missing(37)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing tsfcl')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(37, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           Sfcprop%tsfcl(im) = Sfcprop%tsfco(im) !--- compute tsfcl from existing variables
         enddo
       enddo
     endif
 
-    if (missing_zorlw) then
+    if (any_missing(38)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing zorlw')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(38, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%landfrac(im) < one .and. Sfcprop%fice(im) < one) then
             Sfcprop%zorlw(im) = min(Sfcprop%zorl(im), 0.317)
@@ -1873,22 +1855,24 @@ contains
       enddo
     endif
 
-    if (missing_zorll) then
+    if (any_missing(39)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing zorll')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(39, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           Sfcprop%zorll(im) = Sfcprop%zorl(im) !--- compute zorll from existing variables
         enddo
       enddo
     endif
 
-    if (missing_zorli) then
+    if (any_missing(40)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing zorli')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(40, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%fice(im)*(one-Sfcprop%landfrac(im)) > zero) then
             Sfcprop%zorli(im) = one
@@ -1897,22 +1881,24 @@ contains
       enddo
     endif
 
-    if (missing_emis_ice) then
+    if (any_missing(46)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing emis_ice')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(46, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           Sfcprop%emis_ice(im) = 0.96
         enddo
       enddo
     endif
 
-    if (missing_sncovr_ice .and. Model%lsm /= Model%lsm_ruc) then
+    if (Model%lsm /= Model%lsm_ruc .and. any_missing(47)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing sncovr_ice')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(47, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           !Sfcprop%sncovr_ice(im) = Sfcprop%sncovr(im)
           Sfcprop%sncovr_ice(im) = zero
@@ -1920,11 +1906,12 @@ contains
       enddo
     endif
 
-    if (missing_snodi) then
+    if (any_missing(48)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing snodi')
       !$omp parallel do default(shared) private(nb, ix, im, tem)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(48, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%fice(im) > zero) then
             tem = one / (Sfcprop%fice(im)*(one-Sfcprop%landfrac(im))+Sfcprop%landfrac(im))
@@ -1936,11 +1923,12 @@ contains
       enddo
     endif
 
-    if (missing_weasdi) then
+    if (any_missing(49)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing weasdi')
       !$omp parallel do default(shared) private(nb, ix, im, tem)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(49, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           if (Sfcprop%fice(im) > zero) then
             tem = one / (Sfcprop%fice(im)*(one-Sfcprop%landfrac(im))+Sfcprop%landfrac(im))
@@ -1953,13 +1941,11 @@ contains
     endif
 
     if (Model%use_cice_alb) then
-      ! index 50 is the CICE ice albedo only when use_cice_alb is set; use_cice_alb is the
-      ! same on all PEs, so this collective call is still made consistently.
-      missing_cice_alb = var_missing_everywhere(sfc%var2(:,:,50))
-      if (missing_cice_alb) then
+      if (any_missing(50)) then
         !$omp parallel do default(shared) private(nb, ix, im)
         do nb = 1, Atm_block%nblks
           do ix = 1, Atm_block%blksz(nb)
+            if (.not. missing_at(50, nb, ix)) cycle
             im = Model%chunk_begin(nb)+ix-1
             if (Sfcprop%oceanfrac(im) > zero .and. &
                  Sfcprop%fice(im) >= Model%min_seaice) then
@@ -1975,12 +1961,13 @@ contains
     endif
 
     ! Fill in composite tsfc for coldstart runs - must happen after tsfcl is computed
-    compute_tsfc_for_colstart: if (missing_weasdl) then
+    compute_tsfc_for_colstart: if (any_missing(36)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing composite tsfc')
       if(Model%frac_grid) then ! 3-way composite
         !$omp parallel do default(shared) private(nb, ix, im, tem, tem1)
         do nb = 1, Atm_block%nblks
           do ix = 1, Atm_block%blksz(nb)
+            if (.not. missing_at(36, nb, ix)) cycle
             im = Model%chunk_begin(nb)+ix-1
             Sfcprop%tsfco(im) = max(con_tice, Sfcprop%tsfco(im)) ! this may break restart reproducibility
             tem1 = one - Sfcprop%landfrac(im)
@@ -1994,6 +1981,7 @@ contains
         !$omp parallel do default(shared) private(nb, ix, im, tem)
         do nb = 1, Atm_block%nblks
           do ix = 1, Atm_block%blksz(nb)
+            if (.not. missing_at(36, nb, ix)) cycle
             im = Model%chunk_begin(nb)+ix-1
             if (Sfcprop%slmsk(im) == 1) then
               Sfcprop%tsfc(im) = Sfcprop%tsfcl(im)
@@ -2007,21 +1995,24 @@ contains
       endif
     endif compute_tsfc_for_colstart
 
-    if (missing_zorlwav) then
+    if (any_missing(sfc%nvar2m)) then
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing zorlwav')
       !$omp parallel do default(shared) private(nb, ix, im)
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (.not. missing_at(sfc%nvar2m, nb, ix)) cycle
           im = Model%chunk_begin(nb)+ix-1
           Sfcprop%zorlwav(im) = Sfcprop%zorl(im) !--- compute zorlwav from existing variables
         enddo
       enddo
     endif
 
-    if (missing_tiice) then    !--- initialize internal ice temp from layer 1 and 2 soil temp
+    if (any(sfc%var3ice(:,:,1) < -9990.0_kind_phys)) then    !--- initialize internal ice temp from layer 1 and 2 soil temp
       if (Model%me == Model%master ) call mpp_error(NOTE, 'gfs_driver::surface_props_input - computing tiice')
       do nb = 1, Atm_block%nblks
         do ix = 1, Atm_block%blksz(nb)
+          if (sfc%var3ice(Atm_block%index(nb)%ii(ix) - isc + 1, &
+                           Atm_block%index(nb)%jj(ix) - jsc + 1, 1) >= -9990.0_kind_phys) cycle
           im = Model%chunk_begin(nb)+ix-1
           Sfcprop%tiice(im,1) = max(timin, min(con_tice, Sfcprop%stc(im,1)))
           Sfcprop%tiice(im,2) = max(timin, min(con_tice, Sfcprop%stc(im,2)))
@@ -2031,21 +2022,25 @@ contains
 
     endif ! check on which version of the surface file.
 
+  contains
+
+    !> True if field k was a fill value (< -9990) at any point of this PE's
+    !! compute domain in the input file.
+    logical function any_missing(k)
+      integer, intent(in) :: k
+      any_missing = any(sfc%var2(:,:,k) < -9990.0_kind_phys)
+    end function any_missing
+
+    !> True if field k was a fill value (< -9990) in the input file at
+    !! column ix of block nb.  Checks are made point by point, so the
+    !! result does not depend on the MPI layout or the blocking.
+    logical function missing_at(k, nb, ix)
+      integer, intent(in) :: k, nb, ix
+      missing_at = sfc%var2(Atm_block%index(nb)%ii(ix) - isc + 1, &
+                            Atm_block%index(nb)%jj(ix) - jsc + 1, k) < -9990.0_kind_phys
+    end function missing_at
+
   end subroutine Sfc_io_apply_safeguards
-
-  !> @brief Returns .true. only if a 2D surface field is missing (< -9990) at every
-  !! point on every PE. Used by the coldstart safeguards so that the decision to
-  !! compute a field is the same on all PEs, independent of the MPI layout.
-  !! Collective: must be called by all PEs in the same order.
-  logical function var_missing_everywhere(field) result(missing)
-    real(kind=kind_phys), intent(in) :: field(:,:)
-    integer :: any_present   ! 1 if this PE has at least one non-missing point
-
-    any_present = 0
-    if (any(field >= -9990.0_kind_phys)) any_present = 1
-    call mpp_max(any_present)
-    missing = (any_present == 0)
-  end function var_missing_everywhere
 
   !> @brief destructor for Sfc_io_data_type
   !>
