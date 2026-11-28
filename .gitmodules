@@ -16,8 +16,10 @@
   branch = bugfix/gwd_ilaunch_race
 [submodule "upp"]
   path = upp
-  url = https://github.com/NOAA-EMC/UPP
-  branch = develop
+  #url = https://github.com/NOAA-EMC/UPP
+  #branch = develop
+  url = https://github.com/DeniseWorthen/UPP
+  branch = feature/oneapi_speed
 [submodule "mpas/MPAS-Model"]
   path = mpas/MPAS-Model
   url = https://github.com/ufs-community/MPAS-Model.git
